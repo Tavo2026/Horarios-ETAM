@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Horarios 2026 — E.T. Alemana Moreno</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css">
+<style>
+:root{--bg:#f5f3ee;--surface:#fff;--surface2:#eeece7;--border:#dddbd4;--border2:#c9c7c0;--text:#1a1917;--text2:#6b6960;--text3:#9c9a93;--accent:#2d5a3d;--accent-light:#e8f0eb;--accent-text:#1a3d28;--blue-light:#e8eef5;--blue-text:#0f2340;--red:#8b2020;--radius:10px;--radius-sm:6px;--shadow:0 1px 3px rgba(0,0,0,.06)}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+.header{background:var(--accent);color:white;padding:1.25rem 1.25rem 1rem}
+.header-top{display:flex;align-items:center;gap:10px;margin-bottom:2px}
+.header h1{font-size:15px;font-weight:600;color:#e8f0eb}
+.header p{font-size:12px;color:rgba(255,255,255,.55);font-family:'DM Mono',monospace}
+.header-status{font-size:11px;margin-top:6px;display:flex;align-items:center;gap:6px}
+.dot{width:7px;height:7px;border-radius:50%;background:#86efac;display:inline-block}
+.dot.loading{background:#fcd34d;animation:pulse 1s infinite}
+.dot.error{background:#fca5a5}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+.refresh-btn{background:none;border:.5px solid rgba(255,255,255,.3);border-radius:6px;color:rgba(255,255,255,.8);padding:3px 8px;font-size:11px;cursor:pointer;font-family:'DM Sans',sans-serif;display:flex;align-items:center;gap:4px;margin-left:auto}
+.container{padding:1rem;max-width:600px;margin:0 auto}
+.loading-screen{text-align:center;padding:3rem 1rem;color:var(--text2)}
+.spin{font-size:32px;display:block;margin-bottom:12px;animation:spin 1s linear infinite;color:var(--accent)}
+.mode-bar{display:flex;background:var(--surface);border:.5px solid var(--border);border-radius:var(--radius);padding:3px;margin-bottom:1rem;box-shadow:var(--shadow)}
+.mode-btn{flex:1;padding:8px;font-size:13px;font-weight:500;border:none;border-radius:8px;background:none;color:var(--text2);cursor:pointer;font-family:'DM Sans',sans-serif;display:flex;align-items:center;justify-content:center;gap:6px;transition:all .15s}
+.mode-btn.active{background:var(--accent);color:white}
+.div-tabs{display:flex;gap:6px;margin-bottom:1rem}
+.div-tab{flex:1;padding:7px 10px;font-size:13px;font-weight:500;border:.5px solid var(--border2);border-radius:var(--radius-sm);background:var(--surface);color:var(--text2);cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .15s;text-align:center}
+.div-tab.active{background:var(--text);color:white;border-color:var(--text)}
+.search-wrap{position:relative;margin-bottom:.75rem}
+.search-wrap input,.search-wrap select{width:100%;padding:11px 40px 11px 14px;font-size:15px;border:.5px solid var(--border2);border-radius:var(--radius);background:var(--surface);color:var(--text);font-family:'DM Sans',sans-serif;box-shadow:var(--shadow);appearance:none}
+.search-wrap input:focus,.search-wrap select:focus{outline:none;border-color:var(--accent)}
+.search-wrap .ico{position:absolute;right:12px;top:50%;transform:translateY(-50%);color:var(--text3);font-size:18px;pointer-events:none}
+.suggestions{background:var(--surface);border:.5px solid var(--border2);border-radius:var(--radius);box-shadow:0 4px 12px rgba(0,0,0,.1);max-height:200px;overflow-y:auto;margin-top:-4px;margin-bottom:.75rem;display:none;z-index:10;position:relative}
+.suggestions.open{display:block}
+.sug-item{padding:10px 14px;font-size:14px;cursor:pointer;color:var(--text);border-bottom:.5px solid var(--border)}
+.sug-item:last-child{border-bottom:none}
+.sug-item:hover{background:var(--bg)}
+.card{background:var(--surface);border:.5px solid var(--border);border-radius:var(--radius);padding:1rem;margin-bottom:.75rem;box-shadow:var(--shadow)}
+.card-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.card-name{font-size:15px;font-weight:600;color:var(--text);flex:1}
+.badge{font-size:10px;font-weight:600;padding:2px 7px;border-radius:4px;letter-spacing:.04em;text-transform:uppercase}
+.badge-cbt{background:var(--blue-light);color:var(--blue-text)}
+.badge-tec{background:var(--accent-light);color:var(--accent-text)}
+.badge-count{background:var(--surface2);color:var(--text2);font-weight:500;text-transform:none;font-size:11px}
+.slot{padding:8px 0;border-bottom:.5px solid var(--border);display:flex;flex-direction:column;gap:3px}
+.slot:last-of-type{border-bottom:none;padding-bottom:0}
+.slot-top{display:flex;align-items:center;justify-content:space-between}
+.dia-pill{font-size:10px;font-weight:600;padding:2px 8px;border-radius:4px;background:var(--accent);color:white;letter-spacing:.04em;text-transform:uppercase}
+.horario{font-size:11px;color:var(--text3);font-family:'DM Mono',monospace}
+.slot-mat{font-size:13px;font-weight:500;color:var(--text)}
+.slot-curso{font-size:12px;color:var(--text2)}
+.export-btn{width:100%;margin-top:10px;padding:8px;font-size:12px;font-weight:500;border:.5px solid var(--border2);border-radius:var(--radius-sm);background:none;color:var(--text2);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;font-family:'DM Sans',sans-serif}
+.export-btn:hover{background:var(--bg)}
+.add-btn{width:100%;margin-top:.25rem;padding:10px;font-size:13px;font-weight:500;border:1px dashed var(--border2);border-radius:var(--radius);background:none;color:var(--text3);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;font-family:'DM Sans',sans-serif}
+.add-btn:hover{background:var(--surface);color:var(--text2)}
+.empty{text-align:center;padding:2.5rem 1rem;color:var(--text3);font-size:14px}
+.empty i{font-size:28px;display:block;margin-bottom:8px}
+.grilla-header{font-size:15px;font-weight:600;color:var(--text);margin-bottom:.75rem;display:flex;align-items:center;gap:8px}
+.grilla-scroll{overflow-x:auto;border-radius:var(--radius);box-shadow:var(--shadow)}
+table.grilla{width:100%;border-collapse:collapse;background:var(--surface);font-size:11px;min-width:340px}
+table.grilla th{background:var(--accent);color:rgba(255,255,255,.85);font-weight:500;padding:7px 4px;text-align:center;border:.5px solid rgba(255,255,255,.1);font-size:11px;letter-spacing:.04em}
+table.grilla td{padding:5px;border:.5px solid var(--border);vertical-align:top;min-width:55px}
+table.grilla td.hora{font-family:'DM Mono',monospace;font-size:10px;color:var(--text3);text-align:center;background:var(--surface2);white-space:nowrap;min-width:60px}
+.cell-mat{font-size:10px;font-weight:600;color:var(--text);line-height:1.3}
+.cell-doc{font-size:10px;color:var(--text2);margin-top:1px}
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:200;align-items:center;justify-content:center;padding:1rem}
+.modal-overlay.open{display:flex}
+.modal{background:var(--surface);border-radius:14px;padding:1.5rem;width:100%;max-width:360px;border:.5px solid var(--border2);box-shadow:0 8px 32px rgba(0,0,0,.15)}
+.modal h3{font-size:16px;font-weight:600;margin-bottom:1rem}
+.modal label{font-size:12px;font-weight:500;color:var(--text2);display:block;margin-bottom:4px;margin-top:12px;text-transform:uppercase;letter-spacing:.04em}
+.modal input,.modal select{width:100%;padding:9px 11px;font-size:14px;border:.5px solid var(--border2);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif}
+.modal-btns{display:flex;gap:8px;margin-top:1.25rem}
+.modal-btns button{flex:1;padding:10px;font-size:14px;font-weight:500;border-radius:var(--radius-sm);cursor:pointer;border:.5px solid var(--border2);background:none;color:var(--text2);font-family:'DM Sans',sans-serif}
+.btn-save{background:var(--accent)!important;color:white!important;border-color:var(--accent)!important}
+.error-box{background:#fff5f5;border:.5px solid #fca5a5;border-radius:var(--radius);padding:1rem;font-size:13px;color:var(--red);line-height:1.6}
+</style>
+</head>
+<body>
+<div class="header">
+  <div class="header-top">
+    <i class="ti ti-school" style="font-size:20px;opacity:.8"></i>
+    <h1>Escuela Técnica Alemana Moreno</h1>
+  </div>
+  <p>Horarios 2026 &nbsp;·&nbsp; CBT &amp; Técnica</p>
+  <div class="header-status">
+    <span class="dot loading" id="dot"></span>
+    <span id="stxt" style="color:rgba(255,255,255,.7)">Cargando...</span>
+    <button class="refresh-btn" onclick="loadAll()"><i class="ti ti-refresh"></i> Actualizar</button>
+  </div>
+</div>
+<div class="container">
+  <div id="loadingScreen" class="loading-screen">
+    <i class="ti ti-loader spin"></i>
+    <p>Conectando con Google Sheets...</p>
+  </div>
+  <div id="app" style="display:none">
+    <div class="mode-bar">
+      <button class="mode-btn active" onclick="setMode('docente',this)"><i class="ti ti-user"></i> Docente</button>
+      <button class="mode-btn" onclick="setMode('curso',this)"><i class="ti ti-layout-grid"></i> Curso</button>
+    </div>
+    <div id="pD">
+      <div class="div-tabs">
+        <button class="div-tab active" onclick="setDiv('todos',this)">Todos</button>
+        <button class="div-tab" onclick="setDiv('CBT',this)">CBT</button>
+        <button class="div-tab" onclick="setDiv('TEC',this)">Técnica</button>
+      </div>
+      <div class="search-wrap">
+        <input type="text" id="si" placeholder="Buscar docente..." autocomplete="off"/>
+        <i class="ti ti-search ico"></i>
+      </div>
+      <div class="suggestions" id="sug"></div>
+      <div id="res"></div>
+      <button class="add-btn" onclick="openModal()"><i class="ti ti-plus"></i> Agregar turno</button>
+    </div>
+    <div id="pC" style="display:none">
+      <div class="div-tabs">
+        <button class="div-tab active" onclick="setCDiv('CBT',this)">CBT</button>
+        <button class="div-tab" onclick="setCDiv('TEC',this)">Técnica</button>
+      </div>
+      <div class="search-wrap" style="margin-top:.5rem">
+        <select id="cs" onchange="renderGrilla()"><option value="">— Seleccioná un curso —</option></select>
+        <i class="ti ti-chevron-down ico"></i>
+      </div>
+      <div id="gr"></div>
+    </div>
+  </div>
+</div>
+<div class="modal-overlay" id="modal">
+  <div class="modal">
+    <h3>Agregar turno</h3>
+    <label>Docente</label><input type="text" id="mDoc" placeholder="Apellido, Nombre"/>
+    <label>Materia</label><input type="text" id="mMat" placeholder="Ej: MATEMATICA"/>
+    <label>Curso</label><input type="text" id="mCur" placeholder="Ej: 1° A"/>
+    <label>División</label><select id="mDiv"><option value="CBT">CBT</option><option value="TEC">Técnica</option></select>
+    <label>Día</label><select id="mDia"><option>LUNES</option><option>MARTES</option><option>MIÉRCOLES</option><option>JUEVES</option><option>VIERNES</option></select>
+    <label>Horario</label><input type="text" id="mHor" placeholder="Ej: 7.30 a 8.30"/>
+    <div class="modal-btns">
+      <button onclick="closeModal()">Cancelar</button>
+      <button class="btn-save" onclick="saveModal()">Guardar</button>
+    </div>
+  </div>
+</div>
+<script>
+const SID='1ty3X5wTyrEoi6NEe4qgVhR_BKeedDFph', GCBT='651202313', GTEC='722618844';
+const DIAS=['LUNES','MARTES','MIÉRCOLES','JUEVES','VIERNES'];
+const DO={LUNES:0,MARTES:1,'MIÉRCOLES':2,JUEVES:3,VIERNES:4};
+const norm=s=>s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+let allData=[],curDiv='todos',curMode='docente',curCDiv='CBT';
+
+async function fetchGviz(gid){
+  const r=await fetch(`https://docs.google.com/spreadsheets/d/${SID}/gviz/tq?tqx=out:json&gid=${gid}`);
+  if(!r.ok) throw new Error('HTTP '+r.status);
+  const t=await r.text();
+  return JSON.parse(t.replace(/^[^(]+\(/,'').replace(/\);\s*$/,''));
+}
+
+function cv(c){return(!c||c.v==null)?'':String(c.v).trim();}
+
+function parse(data,div){
+  const rows=data.table.rows, out=[];
+  // Find header row with course names
+  let hdr=-1, cursos=[];
+  for(let r=0;r<Math.min(8,rows.length);r++){
+    if(!rows[r]||!rows[r].c) continue;
+    const vals=rows[r].c.map(cv);
+    if(vals.some(v=>/°\s*[A-ZÁ]|ELECTROMEC|ECO/i.test(v)&&v.length<35)){
+      hdr=r;
+      rows[r].c.forEach((c,i)=>{
+        const v=cv(c);
+        if(v&&/°\s*[A-ZÁ]|ELECTROMEC|ECO/i.test(v)&&v.length<35)
+          cursos.push({name:v.replace(/\s+/g,' ').trim(),col:i});
+      });
+      break;
+    }
+  }
+  if(!cursos.length) return out;
+
+  const DIAS_RE=/^(LUNES|MARTES|MI[EÉ]R|JUEVES|VIERNES)/i;
+  const HORA_RE=/^\d+[\.,]\d+\s*[aA]\s*\d+[\.,]\d+/;
+  const SKIP_RE=/almuerzo|recreo|^\d+\s*min/i;
+
+  let dia='', hora='';
+  for(let r=hdr+1;r<rows.length;r++){
+    const row=rows[r];
+    if(!row||!row.c) continue;
+    const c0=cv(row.c[0]);
+    if(!c0) continue;
+    if(SKIP_RE.test(c0)) continue;
+
+    // Day?
+    if(DIAS_RE.test(c0)){
+      const up=norm(c0);
+      for(const d of DIAS){ if(up.startsWith(norm(d))){dia=d;break;} }
+      hora=''; continue;
+    }
+    // Time?
+    if(HORA_RE.test(c0)){
+      hora=c0.replace(/[,:]/g,'.').replace(/\s+/g,' ').trim();
+    } else {
+      // Could be a continuation row — only process if we have hora
+      if(!hora) continue;
+    }
+    if(!dia||!hora) continue;
+
+    cursos.forEach(curso=>{
+      const raw=row.c[curso.col]?cv(row.c[curso.col]):'';
+      if(!raw) return;
+      if(DIAS_RE.test(raw)||SKIP_RE.test(raw)) return;
+      // skip pure time spans
+      if(/^\d+[,.]\d+\s*[aA]\s*\d+[,.]\d+/.test(raw)&&raw.length<20) return;
+
+      let mat='', doc='';
+      if(raw.includes('\n')){
+        const p=raw.split('\n').map(x=>x.trim()).filter(Boolean);
+        mat=p[0]; doc=p.slice(1).join(' ');
+      } else {
+        // Try " - " separator (last occurrence)
+        const idx=raw.lastIndexOf(' - ');
+        if(idx>0 && raw.length-idx<30){
+          mat=raw.substring(0,idx); doc=raw.substring(idx+3);
+        } else {
+          mat=raw;
+        }
+      }
+      // Try "MATERIA / DOCENTE"
+      if(!doc && mat.includes(' / ')){
+        const p=mat.split(' / ');
+        mat=p[0]; doc=p.slice(1).join(' ');
+      }
+      mat=mat.toUpperCase().replace(/\s+/g,' ').trim();
+      doc=doc.toUpperCase().replace(/\s+/g,' ').trim();
+      if(!mat) return;
+      out.push({d:doc,m:mat,c:curso.name,dia,h:hora,div});
+    });
+  }
+  return out;
+}
+
+async function loadAll(){
+  const dot=document.getElementById('dot'), st=document.getElementById('stxt');
+  dot.className='dot loading'; st.textContent='Actualizando...';
+  document.getElementById('loadingScreen').style.display='block';
+  document.getElementById('app').style.display='none';
+  try{
+    const [dCBT,dTEC]=await Promise.all([fetchGviz(GCBT),fetchGviz(GTEC)]);
+    allData=[...parse(dCBT,'CBT'),...parse(dTEC,'TEC')];
+    if(!allData.length) throw new Error('Sin datos');
+    dot.className='dot';
+    const t=new Date().toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'});
+    st.textContent=`Actualizado ${t} · ${allData.length} turnos`;
+    document.getElementById('loadingScreen').style.display='none';
+    document.getElementById('app').style.display='block';
+    poblarCursos(); renderRes(document.getElementById('si').value);
+  }catch(e){
+    dot.className='dot error'; st.textContent='Error al cargar';
+    document.getElementById('loadingScreen').innerHTML=`<div class="error-box"><b>No se pudo cargar la planilla</b><br>Verificá que esté compartida como pública.<br><br><button onclick="loadAll()" style="margin-top:8px;padding:7px 14px;background:var(--accent);color:white;border:none;border-radius:6px;cursor:pointer;font-family:inherit;font-size:13px"><i class="ti ti-refresh"></i> Reintentar</button></div>`;
+  }
+}
+
+function setMode(m,btn){curMode=m;document.querySelectorAll('.mode-btn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');document.getElementById('pD').style.display=m==='docente'?'':'none';document.getElementById('pC').style.display=m==='curso'?'':'none';if(m==='curso')poblarCursos();}
+function setDiv(d,btn){curDiv=d;document.querySelectorAll('#pD .div-tab').forEach(t=>t.classList.remove('active'));btn.classList.add('active');renderRes(document.getElementById('si').value);updSug(document.getElementById('si').value);}
+function setCDiv(d,btn){curCDiv=d;document.querySelectorAll('#pC .div-tab').forEach(t=>t.classList.remove('active'));btn.classList.add('active');poblarCursos();renderGrilla();}
+
+function poblarCursos(){
+  const cur=[...new Set(allData.filter(x=>x.div===curCDiv).map(x=>x.c))].sort();
+  const sel=document.getElementById('cs'),prev=sel.value;
+  sel.innerHTML='<option value="">— Seleccioná un curso —</option>'+cur.map(c=>`<option value="${c}"${c===prev?' selected':''}>${c}</option>`).join('');
+  if(!cur.includes(prev))renderGrilla();
+}
+
+function renderGrilla(){
+  const curso=document.getElementById('cs').value,div=document.getElementById('gr');
+  if(!curso){div.innerHTML='';return;}
+  const slots=allData.filter(x=>x.c===curso&&x.div===curCDiv);
+  if(!slots.length){div.innerHTML='<div class="empty">Sin datos</div>';return;}
+  const horas=[...new Set(slots.map(x=>x.h))].sort((a,b)=>parseFloat(a)-parseFloat(b));
+  let h=`<div class="grilla-header"><i class="ti ti-calendar" style="font-size:18px;color:var(--text2)"></i>${curso}</div><div class="grilla-scroll"><table class="grilla"><thead><tr><th>Horario</th>`;
+  DIAS.forEach(d=>h+=`<th>${d.slice(0,3)}</th>`);
+  h+=`</tr></thead><tbody>`;
+  horas.forEach(hora=>{
+    h+=`<tr><td class="hora">${hora}</td>`;
+    DIAS.forEach(dia=>{
+      const m=slots.filter(x=>x.dia===dia&&x.h===hora);
+      if(m.length){h+=`<td>`;m.forEach(s=>h+=`<div class="cell-mat">${s.m}</div>${s.d?`<div class="cell-doc">${s.d}</div>`:''}`);h+=`</td>`;}
+      else h+=`<td></td>`;
+    });
+    h+=`</tr>`;
+  });
+  h+=`</tbody></table></div><button class="export-btn" onclick="expCurso('${curso.replace(/'/g,"&#39;")}')"><i class="ti ti-download"></i> Exportar horario de ${curso}</button>`;
+  div.innerHTML=h;
+}
+
+function fil(){return curDiv==='todos'?allData:allData.filter(x=>x.div===curDiv);}
+function docs(){return[...new Set(fil().map(x=>x.d))].filter(Boolean).sort();}
+
+function updSug(val){
+  const q=norm(val),sug=document.getElementById('sug');
+  if(!q||q.length<1){sug.classList.remove('open');return;}
+  const list=docs().filter(d=>norm(d).includes(q)).slice(0,8);
+  if(!list.length){sug.classList.remove('open');return;}
+  sug.innerHTML=list.map(d=>`<div class="sug-item" onclick="pick('${d.replace(/'/g,"&#39;")}')">${d}</div>`).join('');
+  sug.classList.add('open');
+}
+
+function renderRes(query){
+  const div=document.getElementById('res');
+  if(!query||query.length<2){div.innerHTML='';return;}
+  const q=norm(query),matches=fil().filter(x=>x.d&&norm(x.d).includes(q));
+  if(!matches.length){div.innerHTML='<div class="empty"><i class="ti ti-mood-empty"></i>No se encontró ningún docente</div>';return;}
+  const byD={};matches.forEach(x=>{if(!byD[x.d])byD[x.d]=[];byD[x.d].push(x);});
+  let html='';
+  Object.keys(byD).sort().forEach(doc=>{
+    const slots=byD[doc].sort((a,b)=>(DO[a.dia]||99)-(DO[b.dia]||99));
+    const hasCBT=slots.some(s=>s.div==='CBT'),hasTEC=slots.some(s=>s.div==='TEC');
+    html+=`<div class="card"><div class="card-head"><i class="ti ti-user-circle" style="font-size:18px;color:var(--text2)"></i><span class="card-name">${doc}</span>${hasCBT?'<span class="badge badge-cbt">CBT</span>':''}${hasTEC?'<span class="badge badge-tec">Técnica</span>':''}<span class="badge badge-count">${slots.length} turno${slots.length>1?'s':''}</span></div>`;
+    slots.forEach(s=>{html+=`<div class="slot"><div class="slot-top"><span class="dia-pill">${s.dia}</span><span class="horario">${s.h}</span></div><div class="slot-mat">${s.m}</div><div class="slot-curso"><i class="ti ti-door" style="font-size:11px;vertical-align:-1px"></i> ${s.c}</div></div>`;});
+    html+=`<button class="export-btn" onclick="expDoc('${doc.replace(/'/g,"&#39;")}')"><i class="ti ti-download"></i> Exportar horario</button></div>`;
+  });
+  div.innerHTML=html;
+}
+
+function pick(n){document.getElementById('si').value=n;document.getElementById('sug').classList.remove('open');renderRes(n);}
+document.getElementById('si').addEventListener('input',e=>{updSug(e.target.value);renderRes(e.target.value);});
+document.addEventListener('click',e=>{if(!e.target.closest('#si')&&!e.target.closest('#sug'))document.getElementById('sug').classList.remove('open');});
+function openModal(){document.getElementById('mDoc').value=document.getElementById('si').value||'';document.getElementById('modal').classList.add('open');}
+function closeModal(){document.getElementById('modal').classList.remove('open');}
+function saveModal(){
+  const doc=document.getElementById('mDoc').value.trim().toUpperCase();
+  const mat=document.getElementById('mMat').value.trim().toUpperCase();
+  const cur=document.getElementById('mCur').value.trim();
+  const div=document.getElementById('mDiv').value;
+  const dia=document.getElementById('mDia').value;
+  const hor=document.getElementById('mHor').value.trim();
+  if(!doc||!mat||!cur||!hor){alert('Completá todos los campos');return;}
+  allData.push({d:doc,m:mat,c:cur,dia,h:hor,div});
+  closeModal();
+  if(curMode==='curso')poblarCursos();
+  else{document.getElementById('si').value=doc;renderRes(doc);}
+}
+document.getElementById('modal').addEventListener('click',e=>{if(e.target===document.getElementById('modal'))closeModal();});
+
+function expDoc(doc){
+  const slots=allData.filter(x=>x.d===doc).sort((a,b)=>(DO[a.dia]||99)-(DO[b.dia]||99));
+  let txt=`HORARIO DE ${doc}\nEscuela Técnica Alemana Moreno - 2026\n${'='.repeat(44)}\n\n`;
+  DIAS.forEach(dia=>{const del=slots.filter(s=>s.dia===dia);if(!del.length)return;txt+=`${dia}\n${'-'.repeat(24)}\n`;del.forEach(s=>txt+=`  ${s.h.padEnd(18)} ${s.m} · ${s.c} [${s.div}]\n`);txt+='\n';});
+  dl(txt,`horario_${doc.replace(/\s+/g,'_')}.txt`);
+}
+function expCurso(curso){
+  const slots=allData.filter(x=>x.c===curso).sort((a,b)=>(DO[a.dia]||99)-(DO[b.dia]||99));
+  let txt=`HORARIO DE ${curso}\nEscuela Técnica Alemana Moreno - 2026\n${'='.repeat(44)}\n\n`;
+  DIAS.forEach(dia=>{const del=slots.filter(s=>s.dia===dia);if(!del.length)return;txt+=`${dia}\n${'-'.repeat(24)}\n`;del.forEach(s=>txt+=`  ${s.h.padEnd(18)} ${s.m} · ${s.d}\n`);txt+='\n';});
+  dl(txt,`horario_${curso.replace(/[\s°]/g,'_')}.txt`);
+}
+function dl(txt,name){const a=document.createElement('a');a.href='data:text/plain;charset=utf-8,'+encodeURIComponent(txt);a.download=name;a.click();}
+
+loadAll();
+</script>
+</body>
+</html>
