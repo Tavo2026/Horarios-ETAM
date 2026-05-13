@@ -169,12 +169,12 @@ function parse(data,div){
   for(let r=0;r<Math.min(8,rows.length);r++){
     if(!rows[r]||!rows[r].c) continue;
     const vals=rows[r].c.map(cv);
-    if(vals.some(v=>/°\s*[A-ZÁ]|ELECTROMEC|ECO/i.test(v)&&v.length<35)){
+    if(vals.some(v=>/[°º]\s*[A-ZÁ]|ELECTROMEC|ECO/i.test(v)&&v.length<35)){
       hdr=r;
       rows[r].c.forEach((c,i)=>{
         const v=cv(c);
-        if(v&&/°\s*[A-ZÁ]|ELECTROMEC|ECO/i.test(v)&&v.length<35)
-          cursos.push({name:v.replace(/\s+/g,' ').trim(),col:i});
+        if(v&&/[°º]\s*[A-ZÁ]|ELECTROMEC|ECO/i.test(v)&&v.length<35)
+          cursos.push({name:v.replace(/\s+/g,' ').trim().replace(/º/g,'°'),col:i});
       });
       break;
     }
