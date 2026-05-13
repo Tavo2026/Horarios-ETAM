@@ -181,7 +181,7 @@ function parse(data,div){
   }
   if(!cursos.length) return out;
 
-  const DIAS_RE=/^(LUNES|MARTES|MI[EÉ]R|JUEVES|VIERNES)/i;
+  const DIAS_RE=/^(LUNES|MARTES|MI[EÉ]R[CK]?\.?|MIERC\.?|JUEVES|VIERNES)/i;
   const HORA_RE=/^\d+[\.,:]\d+\s*[aA]\s*\d+[\.,:]\d+/;
   const SKIP_RE=/almuerzo|recreo|^\d+\s*min/i;
   const TIME_SPAN_RE = /^\d+[,.:]\d+\s*[aA]\s*\d+[,.:]\d+/;
@@ -410,7 +410,10 @@ function renderGrilla(){
     h+=`<tr><td class="hora">${hora}</td>`;
     DIAS.forEach(dia=>{
       const m=slots.filter(x=>x.dia===dia&&x.h===hora);
-      if(m.length){h+=`<td>`;m.forEach(s=>h+=`<div class="cell-mat">${s.m}</div>${s.d?`<div class="cell-doc">${s.d}</div>`:''}`);h+=`</td>`;}
+      // Deduplicate: same materia+docente combo only once
+      const seen=new Set();
+      const uniq=m.filter(s=>{const k=s.m+'|'+s.d;if(seen.has(k))return false;seen.add(k);return true;});
+      if(uniq.length){h+=`<td>`;uniq.forEach(s=>h+=`<div class="cell-mat">${s.m}</div>${s.d?`<div class="cell-doc">${s.d}</div>`:''}`);h+=`</td>`;}
       else h+=`<td></td>`;
     });
     h+=`</tr>`;
