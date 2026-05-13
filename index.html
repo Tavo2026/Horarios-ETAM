@@ -163,6 +163,7 @@ function cv(c){return(!c||c.v==null)?'':String(c.v).trim();}
 
 function parse(data,div){
   const rows=data.table.rows, out=[];
+
   // Find header row with course names
   let hdr=-1, cursos=[];
   for(let r=0;r<Math.min(8,rows.length);r++){
@@ -184,60 +185,128 @@ function parse(data,div){
   const HORA_RE=/^\d+[\.,]\d+\s*[aA]\s*\d+[\.,]\d+/;
   const SKIP_RE=/almuerzo|recreo|^\d+\s*min/i;
 
-  let dia='', hora='';
+  // Build a clean list of rows with their type
+  // Structure: for each time slot there are TWO rows:
+  //   row A (has time in col0): materia (sometimes with docente "MAT - DOC")
+  //   row B (has next time OR docente only): docente for row A's slots
+  // We process pairs: collect materia from row A, then docente from row B
+
+  let dia='';
+  // pending[col] = {mat, hora} waiting for docente
+  let pending = {};
+
   for(let r=hdr+1;r<rows.length;r++){
     const row=rows[r];
     if(!row||!row.c) continue;
     const c0=cv(row.c[0]);
-    if(!c0) continue;
-    if(SKIP_RE.test(c0)) continue;
 
-    // Day?
-    if(DIAS_RE.test(c0)){
+    // Day header
+    if(c0 && DIAS_RE.test(c0)){
+      // flush pending
+      Object.values(pending).forEach(p=>{
+        if(p.mat) out.push({d:'',m:p.mat,c:p.curso,dia,h:p.hora,div});
+      });
+      pending={};
       const up=norm(c0);
       for(const d of DIAS){ if(up.startsWith(norm(d))){dia=d;break;} }
-      hora=''; continue;
+      continue;
     }
-    // Time?
-    if(HORA_RE.test(c0)){
-      hora=c0.replace(/[,:]/g,'.').replace(/\s+/g,' ').trim();
-    } else {
-      // Could be a continuation row — only process if we have hora
-      if(!hora) continue;
-    }
-    if(!dia||!hora) continue;
 
-    cursos.forEach(curso=>{
-      const raw=row.c[curso.col]?cv(row.c[curso.col]):'';
-      if(!raw) return;
-      if(DIAS_RE.test(raw)||SKIP_RE.test(raw)) return;
-      // skip pure time spans
-      if(/^\d+[,.]\d+\s*[aA]\s*\d+[,.]\d+/.test(raw)&&raw.length<20) return;
+    if(!dia) continue;
+    if(c0 && SKIP_RE.test(c0)) continue;
 
-      let mat='', doc='';
-      if(raw.includes('\n')){
-        const p=raw.split('\n').map(x=>x.trim()).filter(Boolean);
-        mat=p[0]; doc=p.slice(1).join(' ');
-      } else {
-        // Try " - " separator (last occurrence)
-        const idx=raw.lastIndexOf(' - ');
-        if(idx>0 && raw.length-idx<30){
-          mat=raw.substring(0,idx); doc=raw.substring(idx+3);
+    const isHora = c0 && HORA_RE.test(c0);
+    const hora = isHora ? c0.replace(/[,:]/g,'.').replace(/\s+/g,' ').trim() : null;
+
+    if(isHora){
+      // Flush pending from previous hora (those without docente found)
+      Object.values(pending).forEach(p=>{
+        if(p.mat) out.push({d:'',m:p.mat,c:p.curso,dia,h:p.hora,div});
+      });
+      pending={};
+
+      // Read materia (and maybe docente) from this row
+      cursos.forEach(curso=>{
+        const raw=row.c[curso.col]?cv(row.c[curso.col]):'';
+        if(!raw||SKIP_RE.test(raw)||DIAS_RE.test(raw)) return;
+        if(/^\d+[,.]\d+\s*[aA]\s*\d+[,.]\d+/.test(raw)&&raw.length<25) return;
+
+        let mat='', doc='';
+        if(raw.includes('\n')){
+          const p=raw.split('\n').map(x=>x.trim()).filter(Boolean);
+          mat=p[0]; doc=p.slice(1).join(' ');
+        } else if(raw.includes(' - ')){
+          const idx=raw.lastIndexOf(' - ');
+          const after=raw.substring(idx+3);
+          // Only split if the part after " - " looks like a name (no spaces or short)
+          if(after.length>0 && after.length<30 && !/^(EIE|suple|S\/A)/i.test(after)){
+            mat=raw.substring(0,idx); doc=after;
+          } else if(/^(EIE|suple|S\/A)/i.test(after)){
+            // "MAT - DOC - EIE" → find first " - "
+            const first=raw.indexOf(' - ');
+            mat=raw.substring(0,first);
+            doc=raw.substring(first+3).replace(/\s*-\s*(EIE|suple\s*\w*|S\/A)/gi,'').trim();
+          } else {
+            mat=raw;
+          }
+        } else if(raw.includes(' / ')){
+          const p=raw.split(' / ');
+          mat=p[0]; doc=p.slice(1).join(' ');
         } else {
           mat=raw;
         }
-      }
-      // Try "MATERIA / DOCENTE"
-      if(!doc && mat.includes(' / ')){
-        const p=mat.split(' / ');
-        mat=p[0]; doc=p.slice(1).join(' ');
-      }
-      mat=mat.toUpperCase().replace(/\s+/g,' ').trim();
-      doc=doc.toUpperCase().replace(/\s+/g,' ').trim();
-      if(!mat) return;
-      out.push({d:doc,m:mat,c:curso.name,dia,h:hora,div});
-    });
+
+        mat=mat.toUpperCase().replace(/\s+/g,' ').trim();
+        doc=doc.toUpperCase().replace(/\s+/g,' ').trim();
+        // clean "suple XXX" from doc
+        doc=doc.replace(/\bSUPLE\s+\w+/gi,'').trim();
+        if(!mat) return;
+
+        if(doc){
+          out.push({d:doc,m:mat,c:curso.name,dia,h:hora,div});
+        } else {
+          // store pending, waiting for docente in next row
+          pending[curso.col]={mat,hora,curso:curso.name};
+        }
+      });
+
+    } else {
+      // Non-time row: contains docentes for pending slots
+      cursos.forEach(curso=>{
+        const raw=row.c[curso.col]?cv(row.c[curso.col]):'';
+        if(!raw||SKIP_RE.test(raw)||DIAS_RE.test(raw)) return;
+        if(/^\d+[,.]\d+\s*[aA]\s*\d+[,.]\d+/.test(raw)&&raw.length<25) return;
+
+        const p=pending[curso.col];
+        if(p){
+          // This cell is the docente for pending materia
+          let doc=raw.toUpperCase().replace(/\s+/g,' ').replace(/\bSUPLE\s+\w+/gi,'').trim();
+          out.push({d:doc,m:p.mat,c:p.curso,dia,h:p.hora,div});
+          delete pending[curso.col];
+        }
+        // If no pending, this could be a standalone cell (e.g. long-block class)
+        // Try to parse as materia - docente
+        else if(raw.includes(' - ')){
+          const idx=raw.lastIndexOf(' - ');
+          const after=raw.substring(idx+3);
+          if(after.length>0&&after.length<30){
+            const mat=raw.substring(0,idx).toUpperCase().trim();
+            const doc=after.toUpperCase().replace(/\bSUPLE\s+\w+/gi,'').trim();
+            if(mat && p===undefined){
+              // find last known hora for this dia
+              const lastHora = out.filter(x=>x.dia===dia&&x.div===div).slice(-1)[0]?.h||'';
+              if(lastHora) out.push({d:doc,m:mat,c:curso.name,dia,h:lastHora,div});
+            }
+          }
+        }
+      });
+    }
   }
+  // flush remaining pending
+  Object.values(pending).forEach(p=>{
+    if(p.mat) out.push({d:'',m:p.mat,c:p.curso,dia,h:p.hora,div});
+  });
+
   return out;
 }
 
