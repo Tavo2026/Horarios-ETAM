@@ -182,130 +182,119 @@ function parse(data,div){
   if(!cursos.length) return out;
 
   const DIAS_RE=/^(LUNES|MARTES|MI[EÉ]R|JUEVES|VIERNES)/i;
-  const HORA_RE=/^\d+[\.,]\d+\s*[aA]\s*\d+[\.,]\d+/;
+  const HORA_RE=/^\d+[\.,:]\d+\s*[aA]\s*\d+[\.,:]\d+/;
   const SKIP_RE=/almuerzo|recreo|^\d+\s*min/i;
 
-  // Build a clean list of rows with their type
-  // Structure: for each time slot there are TWO rows:
-  //   row A (has time in col0): materia (sometimes with docente "MAT - DOC")
-  //   row B (has next time OR docente only): docente for row A's slots
-  // We process pairs: collect materia from row A, then docente from row B
+  // Helper: clean docente string
+  const cleanDoc = s => s.toUpperCase()
+    .replace(/\bSUPLE\s+[A-ZÑÁÉÍÓÚ]+/gi,'')
+    .replace(/\bS\/A\b/gi,'')
+    .replace(/\([A-Z]+\)/g,'')
+    .replace(/\s+/g,' ').trim();
+
+  // Detect what each row is
+  function rowType(row){
+    if(!row||!row.c) return 'empty';
+    const c0=cv(row.c[0]);
+    if(!c0) return 'data'; // could be a docente-only row
+    if(DIAS_RE.test(c0)) return 'dia';
+    if(SKIP_RE.test(c0)) return 'skip';
+    if(HORA_RE.test(c0)) return 'hora';
+    return 'data';
+  }
 
   let dia='';
-  // pending[col] = {mat, hora} waiting for docente
-  let pending = {};
+  let lastHora='';
 
   for(let r=hdr+1;r<rows.length;r++){
     const row=rows[r];
-    if(!row||!row.c) continue;
+    const type=rowType(row);
+    if(type==='empty'||type==='skip') continue;
     const c0=cv(row.c[0]);
 
-    // Day header
-    if(c0 && DIAS_RE.test(c0)){
-      // flush pending
-      Object.values(pending).forEach(p=>{
-        if(p.mat) out.push({d:'',m:p.mat,c:p.curso,dia,h:p.hora,div});
-      });
-      pending={};
+    if(type==='dia'){
       const up=norm(c0);
       for(const d of DIAS){ if(up.startsWith(norm(d))){dia=d;break;} }
+      lastHora='';
       continue;
     }
 
     if(!dia) continue;
-    if(c0 && SKIP_RE.test(c0)) continue;
 
-    const isHora = c0 && HORA_RE.test(c0);
-    const hora = isHora ? c0.replace(/[,:]/g,'.').replace(/\s+/g,' ').trim() : null;
+    if(type==='hora'){
+      lastHora=c0.replace(/[,:]/g,'.').replace(/\s+/g,' ').trim();
 
-    if(isHora){
-      // Flush pending from previous hora (those without docente found)
-      Object.values(pending).forEach(p=>{
-        if(p.mat) out.push({d:'',m:p.mat,c:p.curso,dia,h:p.hora,div});
-      });
-      pending={};
+      // Process this row: materia row
+      // Look ahead to next row for docente
+      const nextRow = rows[r+1];
+      const nextType = nextRow ? rowType(nextRow) : 'empty';
+      // nextRow is "docente row" if it's data OR if it's another hora but col0 starts the next hora
 
-      // Read materia (and maybe docente) from this row
       cursos.forEach(curso=>{
-        const raw=row.c[curso.col]?cv(row.c[curso.col]):'';
-        if(!raw||SKIP_RE.test(raw)||DIAS_RE.test(raw)) return;
-        if(/^\d+[,.]\d+\s*[aA]\s*\d+[,.]\d+/.test(raw)&&raw.length<25) return;
+        const matRaw = row.c[curso.col] ? cv(row.c[curso.col]) : '';
+        if(!matRaw||SKIP_RE.test(matRaw)||DIAS_RE.test(matRaw)) return;
+        if(/^\d+[\.,:]\d+\s*[aA]\s*\d+[\.,:]\d+/.test(matRaw)&&matRaw.length<25) return;
 
         let mat='', doc='';
-        if(raw.includes('\n')){
-          const p=raw.split('\n').map(x=>x.trim()).filter(Boolean);
-          mat=p[0]; doc=p.slice(1).join(' ');
-        } else if(raw.includes(' - ')){
-          const idx=raw.lastIndexOf(' - ');
-          const after=raw.substring(idx+3);
-          // Only split if the part after " - " looks like a name (no spaces or short)
-          if(after.length>0 && after.length<30 && !/^(EIE|suple|S\/A)/i.test(after)){
-            mat=raw.substring(0,idx); doc=after;
-          } else if(/^(EIE|suple|S\/A)/i.test(after)){
-            // "MAT - DOC - EIE" → find first " - "
-            const first=raw.indexOf(' - ');
-            mat=raw.substring(0,first);
-            doc=raw.substring(first+3).replace(/\s*-\s*(EIE|suple\s*\w*|S\/A)/gi,'').trim();
-          } else {
-            mat=raw;
+
+        // Case 1: materia and docente joined in same cell with " - "
+        if(matRaw.includes('\n')){
+          const p=matRaw.split('\n').map(x=>x.trim()).filter(Boolean);
+          mat=p[0]; doc=cleanDoc(p.slice(1).join(' '));
+        } else if(matRaw.includes(' - ')){
+          // Could be "MAT - DOC" or "MAT - DOC - EIE"
+          const parts=matRaw.split(' - ').map(x=>x.trim()).filter(Boolean);
+          if(parts.length===2){
+            mat=parts[0]; doc=cleanDoc(parts[1]);
+          } else if(parts.length>=3){
+            // Pattern: MAT - DOC - EIE or similar
+            mat=parts[0];
+            // docente is parts[1] if parts[2] is "EIE" or similar marker
+            if(/^(EIE|suple|S\/A)/i.test(parts[2])){
+              doc=cleanDoc(parts[1]);
+            } else {
+              mat=parts[0]+' - '+parts[1];
+              doc=cleanDoc(parts.slice(2).join(' '));
+            }
           }
-        } else if(raw.includes(' / ')){
-          const p=raw.split(' / ');
-          mat=p[0]; doc=p.slice(1).join(' ');
+        } else if(matRaw.includes(' / ')){
+          const p=matRaw.split(' / ');
+          mat=p[0]; doc=cleanDoc(p.slice(1).join(' '));
         } else {
-          mat=raw;
+          mat=matRaw;
+        }
+
+        // Case 2: docente not in same cell — look in next row(s)
+        if(!doc){
+          // Check next row (and the one after if needed)
+          for(let nr=r+1; nr<Math.min(r+3, rows.length); nr++){
+            const nrRow = rows[nr];
+            if(!nrRow||!nrRow.c) continue;
+            const nrC0 = cv(nrRow.c[0]);
+            // Stop if we hit a new day
+            if(nrC0 && DIAS_RE.test(nrC0)) break;
+            const nrCell = nrRow.c[curso.col] ? cv(nrRow.c[curso.col]) : '';
+            if(!nrCell) continue;
+            if(SKIP_RE.test(nrCell)||DIAS_RE.test(nrCell)) continue;
+            if(/^\d+[\.,:]\d+\s*[aA]\s*\d+[\.,:]\d+/.test(nrCell)&&nrCell.length<25) continue;
+
+            // If this next cell has " - " pattern, it's a new materia, not a docente
+            if(nrCell.includes(' - ')||nrCell.includes('\n')) break;
+
+            // It's a plain docente name
+            doc=cleanDoc(nrCell);
+            break;
+          }
         }
 
         mat=mat.toUpperCase().replace(/\s+/g,' ').trim();
-        doc=doc.toUpperCase().replace(/\s+/g,' ').trim();
-        // clean "suple XXX" from doc
-        doc=doc.replace(/\bSUPLE\s+\w+/gi,'').trim();
         if(!mat) return;
 
-        if(doc){
-          out.push({d:doc,m:mat,c:curso.name,dia,h:hora,div});
-        } else {
-          // store pending, waiting for docente in next row
-          pending[curso.col]={mat,hora,curso:curso.name};
-        }
-      });
-
-    } else {
-      // Non-time row: contains docentes for pending slots
-      cursos.forEach(curso=>{
-        const raw=row.c[curso.col]?cv(row.c[curso.col]):'';
-        if(!raw||SKIP_RE.test(raw)||DIAS_RE.test(raw)) return;
-        if(/^\d+[,.]\d+\s*[aA]\s*\d+[,.]\d+/.test(raw)&&raw.length<25) return;
-
-        const p=pending[curso.col];
-        if(p){
-          // This cell is the docente for pending materia
-          let doc=raw.toUpperCase().replace(/\s+/g,' ').replace(/\bSUPLE\s+\w+/gi,'').trim();
-          out.push({d:doc,m:p.mat,c:p.curso,dia,h:p.hora,div});
-          delete pending[curso.col];
-        }
-        // If no pending, this could be a standalone cell (e.g. long-block class)
-        // Try to parse as materia - docente
-        else if(raw.includes(' - ')){
-          const idx=raw.lastIndexOf(' - ');
-          const after=raw.substring(idx+3);
-          if(after.length>0&&after.length<30){
-            const mat=raw.substring(0,idx).toUpperCase().trim();
-            const doc=after.toUpperCase().replace(/\bSUPLE\s+\w+/gi,'').trim();
-            if(mat && p===undefined){
-              // find last known hora for this dia
-              const lastHora = out.filter(x=>x.dia===dia&&x.div===div).slice(-1)[0]?.h||'';
-              if(lastHora) out.push({d:doc,m:mat,c:curso.name,dia,h:lastHora,div});
-            }
-          }
-        }
+        out.push({d:doc,m:mat,c:curso.name,dia,h:lastHora,div});
       });
     }
+    // type==='data' rows are handled by the look-ahead in 'hora' rows
   }
-  // flush remaining pending
-  Object.values(pending).forEach(p=>{
-    if(p.mat) out.push({d:'',m:p.mat,c:p.curso,dia,h:p.hora,div});
-  });
 
   return out;
 }
