@@ -667,31 +667,45 @@ async function loadAll(){
 
     // Post-processing: build docente → most common materia dictionary,
     // and fill in missing materias OR missing docentes.
+    // Filter out materias that look bogus (contain only known docente surnames).
+    const allDocs = new Set();
+    allData.forEach(t => { if(t.d) allDocs.add(t.d); });
+
+    function isCleanMateria(m){
+      if(!m) return false;
+      // Reject if all words of m are known docentes (likely a parsing accident)
+      const words = m.split(/\s+/);
+      const allAreDocs = words.length>0 && words.every(w => allDocs.has(w) || allDocs.has(w+' '+words[words.indexOf(w)+1]));
+      if(allAreDocs) return false;
+      return true;
+    }
+
     const docMat = {}; // docente -> {materia: count}
     const matDoc = {}; // materia -> {docente: count}
     allData.forEach(t => {
-      if(t.d && t.m){
+      if(t.d && t.m && isCleanMateria(t.m)){
         if(!docMat[t.d]) docMat[t.d] = {};
         docMat[t.d][t.m] = (docMat[t.d][t.m] || 0) + 1;
         if(!matDoc[t.m]) matDoc[t.m] = {};
         matDoc[t.m][t.d] = (matDoc[t.m][t.d] || 0) + 1;
       }
     });
-    // Pick the most frequent materia for each docente, and docente for each materia
-    const bestMat = {}; // docente -> materia
+    const bestMat = {};
     Object.keys(docMat).forEach(d => {
       const opts = Object.entries(docMat[d]).sort((a,b)=>b[1]-a[1]);
       if(opts.length) bestMat[d] = opts[0][0];
     });
-    const bestDoc = {}; // materia -> docente
+    const bestDoc = {};
     Object.keys(matDoc).forEach(m => {
       const opts = Object.entries(matDoc[m]).sort((a,b)=>b[1]-a[1]);
       if(opts.length) bestDoc[m] = opts[0][0];
     });
-    // Fill in missing values
+    // Fill in missing values OR replace bogus materias
     allData = allData.map(t => {
       const nt = {...t};
-      if(!nt.m && nt.d && bestMat[nt.d]) nt.m = bestMat[nt.d];
+      if(nt.d && (!nt.m || !isCleanMateria(nt.m)) && bestMat[nt.d]){
+        nt.m = bestMat[nt.d];
+      }
       if(!nt.d && nt.m && bestDoc[nt.m]) nt.d = bestDoc[nt.m];
       return nt;
     });
