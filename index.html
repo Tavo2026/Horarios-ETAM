@@ -663,6 +663,40 @@ async function loadAll(){
   try{
     const [dCBT,dTEC]=await Promise.all([fetchGviz(GCBT),fetchGviz(GTEC)]);
     allData=[...parseCBT(dCBT,'CBT'),...parseTEC(dTEC,'TEC')];
+
+    // Post-processing: build docente → most common materia dictionary,
+    // and fill in missing materias OR missing docentes.
+    const docMat = {}; // docente -> {materia: count}
+    const matDoc = {}; // materia -> {docente: count}
+    allData.forEach(t => {
+      if(t.d && t.m){
+        if(!docMat[t.d]) docMat[t.d] = {};
+        docMat[t.d][t.m] = (docMat[t.d][t.m] || 0) + 1;
+        if(!matDoc[t.m]) matDoc[t.m] = {};
+        matDoc[t.m][t.d] = (matDoc[t.m][t.d] || 0) + 1;
+      }
+    });
+    // Pick the most frequent materia for each docente, and docente for each materia
+    const bestMat = {}; // docente -> materia
+    Object.keys(docMat).forEach(d => {
+      const opts = Object.entries(docMat[d]).sort((a,b)=>b[1]-a[1]);
+      if(opts.length) bestMat[d] = opts[0][0];
+    });
+    const bestDoc = {}; // materia -> docente
+    Object.keys(matDoc).forEach(m => {
+      const opts = Object.entries(matDoc[m]).sort((a,b)=>b[1]-a[1]);
+      if(opts.length) bestDoc[m] = opts[0][0];
+    });
+    // Fill in missing values
+    allData = allData.map(t => {
+      const nt = {...t};
+      if(!nt.m && nt.d && bestMat[nt.d]) nt.m = bestMat[nt.d];
+      if(!nt.d && nt.m && bestDoc[nt.m]) nt.d = bestDoc[nt.m];
+      return nt;
+    });
+    // Remove turnos that still have no materia AND no docente
+    allData = allData.filter(t => t.m || t.d);
+
     if(!allData.length) throw new Error('Sin datos');
     dot.className='dot';
     const t=new Date().toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'});
