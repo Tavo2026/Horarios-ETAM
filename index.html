@@ -186,53 +186,41 @@ function parse(data,div){
   const SKIP_RE=/almuerzo|recreo|^\d+\s*min/i;
   const TIME_SPAN_RE = /^\d+[,.:]\d+\s*[aA]\s*\d+[,.:]\d+/;
 
-  // Helper: clean docente string
   const cleanDoc = s => s.toUpperCase()
     .replace(/\bSUPLE\s+[A-ZÑÁÉÍÓÚ]+/gi,'')
     .replace(/\bS\/A\b/gi,'')
     .replace(/\([A-Z]+\)/g,'')
     .replace(/\s+/g,' ').trim();
 
-  // ESTRATEGIA:
-  // Recorremos las filas con horario en orden.
-  // Mantenemos pendingMat[col] = última materia sin docente para esa columna.
-  // Para cada celda:
-  //  - Si contiene "MATERIA - DOCENTE": guardamos el turno directo. Si había pending, lo cerramos sin docente.
-  //  - Si contiene SOLO materia (sin " - " y parece materia): cerramos pending anterior sin docente, guardamos como pending nueva.
-  //  - Si contiene SOLO un nombre (sin " - " y parece docente): es el docente de la pendingMat anterior. Cerramos turno.
-  //  - Largos textos como "EDUCACIÓN FISICA HARYMBAT 12:20-14:20": parsear especial.
-  //
-  // Detección "parece materia" vs "parece docente":
-  //  - Materia: contiene palabras como CIENCIAS, MATEMATICA, INGLES, FISICA, etc. O tiene más de una palabra.
-  //  - Docente: una sola palabra en mayúscula, sin números, sin tildes especiales.
-
   function looksLikeDocente(s){
-    // Una palabra (o "APELLIDO NOMBRE") sin caracteres especiales de materia
     const t = s.trim();
     if (!t || t.length > 35) return false;
-    // Si tiene caracteres tipográficos especiales o números no es docente
-    if (/[\d°/]/.test(t)) return false;
-    // Si tiene palabras clásicas de materia, no es docente
-    if (/(CIENCIAS|MATEM|INGLES|FISICA|FÍSICA|QUIMICA|QUÍMICA|BIOLOGIA|BIOLOGÍA|HISTORIA|GEOGRAFIA|GEOGRAFÍA|LITERATURA|LENGUAJE|CIUDADAN|ARTISTICA|ARTÍSTICA|ALEMAN|ALEMÁN|FILOSOFIA|FILOSOFÍA|TECNOL[OÓ]GIC|ECONOMIA|ECONOMÍA|DERECHO|SOCIALES|NATURALES|NTICX?|CONTABLE|ORGANIZAC|MICRO|MACRO|PROC\.|PROCED|SIST\.|LENG\.|CS\.?\s|SALUD|EIE|SIC|FIS-?|MEC[AÁ]NIC|ELECTR|TERMOD|RESIST|EMPREND|MANT\.|MONTAJE|PROYECTO|DISE[ÑN]O|CONOC\.|ENSAYO|MAQ\.|M[AÁ]QUINAS?|TALLER|SEG\.|LAB\.|METROL|AUTOCAD|ARTE|PYME)/i.test(t)) return false;
-    // Palabras compuestas de tipo "ED. FISICA" etc - tienen punto
+    if (/[\d°º\/]/.test(t)) return false;
+    if (/(CIENCIAS|MATEM|INGLES|FISICA|FÍSICA|QUIMICA|QUÍMICA|BIOLOGIA|BIOLOGÍA|HISTORIA|GEOGRAFIA|GEOGRAFÍA|LITERATURA|LENGUAJE|CIUDADAN|ARTISTICA|ARTÍSTICA|ALEMAN|ALEMÁN|FILOSOFIA|FILOSOFÍA|TECNOL[OÓ]GIC|ECONOMIA|ECONOMÍA|DERECHO|SOCIALES|NATURALES|NTICX?|CONTABLE|ORGANIZAC|MICRO|MACRO|PROC\.|PROCED|SIST\.|LENG\.|CS\.?\s|SALUD|EIE|SIC|FIS-?|MEC[AÁ]NIC|ELECTR|TERMOD|RESIST|EMPREND|MANT\.|MONTAJE|PROYECTO|DISE[ÑN]O|CONOC\.|ENSAYO|MAQ\.|M[AÁ]QUINAS?|TALLER|SEG\.|LAB\.|METROL|AUTOCAD|ARTE|PYME|EDUCACI[OÓ]N|ED\.\s*FIS|DIBUJO|FÍSICO|FISICO|FIS-?Q|GESTION|TRABAJO)/i.test(t)) return false;
     if (/\./.test(t) && !/^M\.E\.|^S\/A/.test(t)) return false;
     return true;
   }
 
   function looksLikeMateria(s){
-    return /(CIENCIAS|MATEM|INGLES|FISICA|FÍSICA|QUIMICA|QUÍMICA|BIOLOGIA|BIOLOGÍA|HISTORIA|GEOGRAFIA|GEOGRAFÍA|LITERATURA|LENGUAJE|CIUDADAN|ARTISTICA|ARTÍSTICA|ALEMAN|ALEMÁN|FILOSOFIA|FILOSOFÍA|TECNOL[OÓ]GIC|ECONOMIA|ECONOMÍA|DERECHO|SOCIALES|NATURALES|NTICX?|CONTABLE|ORGANIZAC|MICRO|MACRO|PROC\.|PROCED|SIST\.|LENG\.|CS\.?\s|CS\s|SALUD|EIE|SIC|FIS-?|MEC[AÁ]NIC|ELECTR|TERMOD|RESIST|EMPREND|MANT\.|MONTAJE|PROYECTO|DISE[ÑN]O|CONOC\.|ENSAYO|MAQ\.|M[AÁ]QUINAS?|TALLER|SEG\.|LAB\.|METROL|AUTOCAD|ARTE|PYME|EDUCACI[OÓ]N|ED\.\s*FIS|DIBUJO|FÍSICO|FISICO)/i.test(s);
+    return /(CIENCIAS|MATEM|INGLES|FISICA|FÍSICA|QUIMICA|QUÍMICA|BIOLOGIA|BIOLOGÍA|HISTORIA|GEOGRAFIA|GEOGRAFÍA|LITERATURA|LENGUAJE|CIUDADAN|ARTISTICA|ARTÍSTICA|ALEMAN|ALEMÁN|FILOSOFIA|FILOSOFÍA|TECNOL[OÓ]GIC|ECONOMIA|ECONOMÍA|DERECHO|SOCIALES|NATURALES|NTICX?|CONTABLE|ORGANIZAC|MICRO|MACRO|PROC\.|PROCED|SIST\.|LENG\.|CS\.?\s|CS\s|SALUD|EIE|SIC|FIS-?|MEC[AÁ]NIC|ELECTR|TERMOD|RESIST|EMPREND|MANT\.|MONTAJE|PROYECTO|DISE[ÑN]O|CONOC\.|ENSAYO|MAQ\.|M[AÁ]QUINAS?|TALLER|SEG\.|LAB\.|METROL|AUTOCAD|ARTE|PYME|EDUCACI[OÓ]N|ED\.\s*FIS|DIBUJO|FÍSICO|FISICO|FIS-?Q|GESTION|TRABAJO)/i.test(s);
   }
 
-  let dia='';
-  // pendingMat[col] = { mat, hora, curso } — materia esperando docente
-  let pendingMat = {};
+  // PASO 1: Recorrer filas y agruparlas por (día, bloque-de-horario).
+  // Un bloque de horario consiste en filas consecutivas con horario, sin
+  // ALMUERZO/RECREO entre ellas. En cada bloque, las celdas se "apilan"
+  // verticalmente — una clase ocupa típicamente 2 filas (materia + docente).
 
-  function flush(col){
-    const p=pendingMat[col];
-    if(p){
-      out.push({d:'',m:p.mat.toUpperCase().replace(/\s+/g,' ').trim(),c:p.curso,dia,h:p.hora,div});
-      delete pendingMat[col];
+  // Estructura intermedia: list of "rowGroups" where each group is a list of
+  // { hora, cells[col] }
+  let dia = '';
+  let blocks = []; // each block: {dia, rows: [{hora, cells: {col: raw}}]}
+  let currentBlock = null;
+
+  function endBlock(){
+    if(currentBlock && currentBlock.rows.length){
+      blocks.push(currentBlock);
     }
+    currentBlock = null;
   }
 
   for(let r=hdr+1;r<rows.length;r++){
@@ -240,10 +228,8 @@ function parse(data,div){
     if(!row||!row.c) continue;
     const c0=cv(row.c[0]);
 
-    // Day header — strict: col0 starts with day name AND row content is mostly day-related
     if(c0 && DIAS_RE.test(c0)){
-      // Flush all pendings
-      Object.keys(pendingMat).forEach(k=>flush(k));
+      endBlock();
       const up=norm(c0);
       if(up.startsWith('lunes')) dia='LUNES';
       else if(up.startsWith('martes')) dia='MARTES';
@@ -254,117 +240,145 @@ function parse(data,div){
     }
 
     if(!dia) continue;
+
+    // Skip rows
     if(c0 && SKIP_RE.test(c0)){
-      // If we hit ALMUERZO/RECREO, flush pendings
-      Object.keys(pendingMat).forEach(k=>flush(k));
+      endBlock();
       continue;
     }
 
-    // Determine hora for this row
-    const isHora = c0 && HORA_RE.test(c0);
-    let hora = '';
-    if (isHora) {
-      hora = c0.replace(/[,:]/g,'.').replace(/\s+/g,' ').trim();
+    // Must be a hora row to be considered part of a block
+    if(c0 && HORA_RE.test(c0)){
+      const hora = c0.replace(/[,:]/g,'.').replace(/\s+/g,' ').trim();
+      // Build cells map for this row (only cells in known curso columns)
+      const cells = {};
+      cursos.forEach(curso=>{
+        const raw = row.c[curso.col] ? cv(row.c[curso.col]) : '';
+        if(raw) cells[curso.col] = raw;
+      });
+      if(!currentBlock) currentBlock = {dia, rows: []};
+      currentBlock.rows.push({hora, cells});
     } else {
-      // Skip rows without time and without col0
-      // But process if they have data in other cols (docente continuations)
-      if (!c0 && !row.c.slice(1).some(cell => cv(cell))) continue;
+      // Empty row or "10 MIN" recreo etc — end block
+      endBlock();
     }
+  }
+  endBlock();
 
-    cursos.forEach(curso=>{
-      const raw = row.c[curso.col] ? cv(row.c[curso.col]) : '';
-      if(!raw) return;
-      if(SKIP_RE.test(raw)||DIAS_RE.test(raw)) return;
-      if(TIME_SPAN_RE.test(raw)&&raw.length<25){ flush(curso.col); return; }
+  // PASO 2: Para cada bloque, procesar cada columna en orden vertical.
+  // Cada columna del bloque tiene filas con celdas. Reconocer pares
+  // materia/docente apilados verticalmente.
 
-      // Multi-line: "MAT G1 / DOC\nMAT G2 / DOC2"
-      if(raw.includes('\n')){
-        flush(curso.col);
-        const lines=raw.split('\n').map(x=>x.trim()).filter(Boolean);
-        lines.forEach(line=>{
+  blocks.forEach(block => {
+    cursos.forEach(curso => {
+      // Collect the values for this column across rows in this block
+      const colSlots = block.rows.map(r => ({
+        hora: r.hora,
+        raw: r.cells[curso.col] || ''
+      }));
+
+      // Walk through slots, recognizing patterns
+      let i = 0;
+      while (i < colSlots.length) {
+        const slot = colSlots[i];
+        const raw = slot.raw;
+        if (!raw) { i++; continue; }
+        if (SKIP_RE.test(raw) || DIAS_RE.test(raw)) { i++; continue; }
+        if (TIME_SPAN_RE.test(raw) && raw.length < 25) { i++; continue; }
+
+        // CASE A: cell has "MATERIA - DOCENTE" — single hour class
+        if (raw.includes('\n')) {
+          // Multi-line cell (e.g. "PROC TEC G2 / SANCHEZ\nLEN TECN G1 / FLORES")
+          const lines = raw.split('\n').map(x=>x.trim()).filter(Boolean);
+          lines.forEach(line => {
+            let mat='', doc='';
+            if(line.includes(' / ')){
+              const p=line.split(' / ');
+              mat=p[0]; doc=cleanDoc(p.slice(1).join(' '));
+            } else if(line.includes(' - ')){
+              const p=line.split(' - ');
+              mat=p[0]; doc=cleanDoc(p[1]||'');
+            } else {
+              mat=line;
+            }
+            mat=mat.toUpperCase().replace(/\s+/g,' ').trim();
+            if(mat) out.push({d:doc,m:mat,c:curso.name,dia:block.dia,h:slot.hora,div});
+          });
+          i++;
+          continue;
+        }
+
+        if (raw.includes(' - ')) {
+          // "MATERIA - DOCENTE" or "MATERIA - DOCENTE - EIE"
+          const parts = raw.split(' - ').map(x=>x.trim()).filter(Boolean);
           let mat='', doc='';
-          if(line.includes(' / ')){
-            const p=line.split(' / ');
-            mat=p[0]; doc=cleanDoc(p.slice(1).join(' '));
-          } else if(line.includes(' - ')){
-            const p=line.split(' - ');
-            mat=p[0]; doc=cleanDoc(p[1]||'');
+          if (parts.length === 2) {
+            mat=parts[0]; doc=cleanDoc(parts[1]);
+          } else if (parts.length >= 3) {
+            mat=parts[0]; doc=cleanDoc(parts[1]);
           } else {
-            mat=line;
+            mat=parts[0];
           }
           mat=mat.toUpperCase().replace(/\s+/g,' ').trim();
-          if(mat && hora) out.push({d:doc,m:mat,c:curso.name,dia,h:hora,div});
-        });
-        return;
-      }
-
-      // Has " - " separator: this is "MATERIA - DOCENTE" or "MATERIA - DOCENTE - EIE"
-      if(raw.includes(' - ')){
-        flush(curso.col); // close any pending in this column
-        const parts=raw.split(' - ').map(x=>x.trim()).filter(Boolean);
-        let mat='', doc='';
-        if(parts.length===2){
-          mat=parts[0]; doc=cleanDoc(parts[1]);
-        } else if(parts.length>=3){
-          // "MAT - DOC - EIE/suple X" pattern
-          mat=parts[0];
-          doc=cleanDoc(parts[1]);
-        } else {
-          mat=parts[0]; doc='';
+          if(mat) {
+            out.push({d:doc,m:mat,c:curso.name,dia:block.dia,h:slot.hora,div});
+            // Check if next slot is empty or has a continuation marker — extend the class
+            const nextSlot = colSlots[i+1];
+            if (nextSlot && (!nextSlot.raw || looksLikeDocente(nextSlot.raw) || /EIE/i.test(nextSlot.raw))) {
+              out.push({d:doc,m:mat,c:curso.name,dia:block.dia,h:nextSlot.hora,div});
+              i++;
+            }
+          }
+          i++;
+          continue;
         }
-        mat=mat.toUpperCase().replace(/\s+/g,' ').trim();
-        if(mat && (hora || dia)){
-          // use hora from this row or last hora found
-          out.push({d:doc,m:mat,c:curso.name,dia,h:hora||'',div});
+
+        if (raw.includes(' / ')) {
+          const p = raw.split(' / ');
+          const mat = p[0].toUpperCase().replace(/\s+/g,' ').trim();
+          const doc = cleanDoc(p.slice(1).join(' '));
+          if(mat) out.push({d:doc,m:mat,c:curso.name,dia:block.dia,h:slot.hora,div});
+          i++;
+          continue;
         }
-        return;
-      }
 
-      // Has " / " separator
-      if(raw.includes(' / ')){
-        flush(curso.col);
-        const p=raw.split(' / ');
-        const mat=p[0].toUpperCase().replace(/\s+/g,' ').trim();
-        const doc=cleanDoc(p.slice(1).join(' '));
-        if(mat && hora) out.push({d:doc,m:mat,c:curso.name,dia,h:hora,div});
-        return;
-      }
+        // Single-token cell — try to pair with next row for docente
+        const isMat = looksLikeMateria(raw);
+        const isDoc = looksLikeDocente(raw);
 
-      // Single token cell
-      const looksMat = looksLikeMateria(raw);
-      const looksDoc = looksLikeDocente(raw);
-
-      if(looksMat && !looksDoc){
-        // It's a materia — flush previous and store as pending
-        flush(curso.col);
-        pendingMat[curso.col]={mat:raw, hora:hora||'', curso:curso.name};
-      } else if(looksDoc && pendingMat[curso.col]){
-        // It's the docente of the previous pending materia
-        const p=pendingMat[curso.col];
-        out.push({
-          d:cleanDoc(raw),
-          m:p.mat.toUpperCase().replace(/\s+/g,' ').trim(),
-          c:p.curso,
-          dia,
-          h:p.hora,
-          div
-        });
-        delete pendingMat[curso.col];
-      } else if(looksDoc && !pendingMat[curso.col]){
-        // Isolated docente name — could be a docente for a multi-hour block
-        // Skip silently (or use last out hora as fallback)
-      } else {
-        // Ambiguous — treat as materia
-        flush(curso.col);
-        if(hora){
-          out.push({d:'',m:raw.toUpperCase().replace(/\s+/g,' ').trim(),c:curso.name,dia,h:hora,div});
+        if (isMat && !isDoc) {
+          // It's a materia — look at next row in same column for docente
+          const nextSlot = colSlots[i+1];
+          if (nextSlot && nextSlot.raw) {
+            const nraw = nextSlot.raw;
+            if (looksLikeDocente(nraw) && !nraw.includes(' - ') && !nraw.includes('\n')) {
+              // Pair materia + docente as ONE class that spans BOTH horas
+              const mat = raw.toUpperCase().replace(/\s+/g,' ').trim();
+              const doc = cleanDoc(nraw);
+              out.push({d:doc,m:mat,c:curso.name,dia:block.dia,h:slot.hora,div});
+              out.push({d:doc,m:mat,c:curso.name,dia:block.dia,h:nextSlot.hora,div});
+              i += 2;
+              continue;
+            }
+          }
+          // No pair found → materia without docente
+          out.push({d:'',m:raw.toUpperCase().replace(/\s+/g,' ').trim(),c:curso.name,dia:block.dia,h:slot.hora,div});
+          i++;
+          continue;
         }
+
+        if (isDoc) {
+          // Lone docente without preceding materia — skip
+          i++;
+          continue;
+        }
+
+        // Ambiguous — store as materia
+        out.push({d:'',m:raw.toUpperCase().replace(/\s+/g,' ').trim(),c:curso.name,dia:block.dia,h:slot.hora,div});
+        i++;
       }
     });
-  }
-
-  // Flush remaining
-  Object.keys(pendingMat).forEach(k=>flush(k));
+  });
 
   return out;
 }
