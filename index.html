@@ -400,6 +400,15 @@ function parseTEC(data, div){
   const SKIP_RE=/almuerzo|recreo|^\d+\s*min/i;
   const CURSO_RE=/[°º]\s*[A-ZÁ]|ELECTROMEC/i;
 
+  // Check if a horario range is "long" (covers >= 2 hours)
+  function isLongRange(hora){
+    const m = hora.match(/(\d+)[\.,:](\d+)\s*[aA]\s*(\d+)[\.,:](\d+)/);
+    if(!m) return false;
+    const startMin = parseInt(m[1])*60 + parseInt(m[2]);
+    const endMin = parseInt(m[3])*60 + parseInt(m[4]);
+    return (endMin - startMin) >= 90; // 1.5 hours or more
+  }
+
   const cleanDoc = s => s.toUpperCase()
     .replace(/\bSUPLE\s+[A-ZÑÁÉÍÓÚ\s\.]+/gi,'')
     .replace(/\bS\/A\b/gi,'')
@@ -558,10 +567,12 @@ function parseTEC(data, div){
             mat = mat.toUpperCase().replace(/\s+/g,' ').trim();
             if(mat){
               out.push({d:doc, m:mat, c:curso.name, dia:block.dia, h:slot.hora, div});
-              // Also fill next slot if it's continuation
-              const next = colSlots[i+1];
-              if(next && (!next.raw || next.cont)){
-                out.push({d:doc, m:mat, c:curso.name, dia:block.dia, h:next.hora, div});
+              // Also fill next slot if it's continuation (only if not long range)
+              if(!isLongRange(slot.hora)){
+                const next = colSlots[i+1];
+                if(next && (!next.raw || next.cont)){
+                  out.push({d:doc, m:mat, c:curso.name, dia:block.dia, h:next.hora, div});
+                }
               }
             }
             j++;
@@ -581,11 +592,13 @@ function parseTEC(data, div){
           mat = mat.toUpperCase().replace(/\s+/g,' ').trim();
           if(mat){
             out.push({d:doc, m:mat, c:curso.name, dia:block.dia, h:slot.hora, div});
-            // Fill next continuation slot
-            const next = colSlots[i+1];
-            if(next && (!next.raw || next.cont)){
-              out.push({d:doc, m:mat, c:curso.name, dia:block.dia, h:next.hora, div});
-              i++;
+            // Fill next continuation slot ONLY if current hora is NOT already a long range
+            if(!isLongRange(slot.hora)){
+              const next = colSlots[i+1];
+              if(next && (!next.raw || next.cont)){
+                out.push({d:doc, m:mat, c:curso.name, dia:block.dia, h:next.hora, div});
+                i++;
+              }
             }
           }
           i++;
