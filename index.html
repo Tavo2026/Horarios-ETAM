@@ -409,6 +409,38 @@ function parseTEC(data, div){
     return (endMin - startMin) >= 90; // 1.5 hours or more
   }
 
+  // Standard time slots for TEC
+  const TEC_SLOTS = [
+    '7.30 a 8.30','8.30 a 9.30','9.40 a 10.40','10.40 a 11.40',
+    '12.10 a 13.10','13.10 a 14.10','14.20 a 15.20','15.20 a 16.20','16.30 a 17.30'
+  ];
+
+  // Expand a (possibly long) hora into its standard slot(s)
+  function expandToSlots(hora){
+    const m = hora.match(/(\d+)[\.,:](\d+)\s*[aA]\s*(\d+)[\.,:](\d+)/);
+    if(!m) return [hora];
+    const startMin = parseInt(m[1])*60 + parseInt(m[2]);
+    const endMin = parseInt(m[3])*60 + parseInt(m[4]);
+    // Find all standard slots that overlap with this range
+    const matching = TEC_SLOTS.filter(slot => {
+      const sm = slot.match(/(\d+)[\.,:](\d+)\s*[aA]\s*(\d+)[\.,:](\d+)/);
+      if(!sm) return false;
+      const sStart = parseInt(sm[1])*60 + parseInt(sm[2]);
+      const sEnd = parseInt(sm[3])*60 + parseInt(sm[4]);
+      // Overlap if not entirely before or after
+      return !(sEnd <= startMin || sStart >= endMin);
+    });
+    return matching.length ? matching : [hora];
+  }
+
+  // Push a class spreading across all standard slots overlapping its hora range
+  function pushSlot(obj){
+    const slots = expandToSlots(obj.h);
+    slots.forEach(s => {
+      out.push({...obj, h: s});
+    });
+  }
+
   const cleanDoc = s => s.toUpperCase()
     .replace(/\bSUPLE\s+[A-ZÑÁÉÍÓÚ\s\.]+/gi,'')
     .replace(/\bS\/A\b/gi,'')
@@ -566,14 +598,7 @@ function parseTEC(data, div){
             }
             mat = mat.toUpperCase().replace(/\s+/g,' ').trim();
             if(mat){
-              out.push({d:doc, m:mat, c:curso.name, dia:block.dia, h:slot.hora, div});
-              // Also fill next slot if it's continuation (only if not long range)
-              if(!isLongRange(slot.hora)){
-                const next = colSlots[i+1];
-                if(next && (!next.raw || next.cont)){
-                  out.push({d:doc, m:mat, c:curso.name, dia:block.dia, h:next.hora, div});
-                }
-              }
+              pushSlot({d:doc, m:mat, c:curso.name, dia:block.dia, h:slot.hora, div});
             }
             j++;
           }
@@ -591,15 +616,7 @@ function parseTEC(data, div){
           let doc = parts.length >= 2 ? cleanDoc(parts.slice(1).join(' - ')) : '';
           mat = mat.toUpperCase().replace(/\s+/g,' ').trim();
           if(mat){
-            out.push({d:doc, m:mat, c:curso.name, dia:block.dia, h:slot.hora, div});
-            // Fill next continuation slot ONLY if current hora is NOT already a long range
-            if(!isLongRange(slot.hora)){
-              const next = colSlots[i+1];
-              if(next && (!next.raw || next.cont)){
-                out.push({d:doc, m:mat, c:curso.name, dia:block.dia, h:next.hora, div});
-                i++;
-              }
-            }
+            pushSlot({d:doc, m:mat, c:curso.name, dia:block.dia, h:slot.hora, div});
           }
           i++;
           continue;
@@ -611,14 +628,13 @@ function parseTEC(data, div){
           if(next && next.raw && looksLikeDoc(next.raw) && !next.raw.includes(' - ') && !next.raw.includes('\n')){
             const mat = raw.toUpperCase().replace(/\s+/g,' ').trim();
             const doc = cleanDoc(next.raw);
-            // Fill both slots with the class
-            out.push({d:doc, m:mat, c:curso.name, dia:block.dia, h:slot.hora, div});
-            out.push({d:doc, m:mat, c:curso.name, dia:block.dia, h:next.hora, div});
+            pushSlot({d:doc, m:mat, c:curso.name, dia:block.dia, h:slot.hora, div});
+            pushSlot({d:doc, m:mat, c:curso.name, dia:block.dia, h:next.hora, div});
             i += 2;
             continue;
           }
           // No docente paired
-          out.push({d:'', m:raw.toUpperCase().replace(/\s+/g,' ').trim(), c:curso.name, dia:block.dia, h:slot.hora, div});
+          pushSlot({d:'', m:raw.toUpperCase().replace(/\s+/g,' ').trim(), c:curso.name, dia:block.dia, h:slot.hora, div});
           i++;
           continue;
         }
@@ -630,7 +646,7 @@ function parseTEC(data, div){
         }
 
         // Ambiguous: store as materia
-        out.push({d:'', m:raw.toUpperCase().replace(/\s+/g,' ').trim(), c:curso.name, dia:block.dia, h:slot.hora, div});
+        pushSlot({d:'', m:raw.toUpperCase().replace(/\s+/g,' ').trim(), c:curso.name, dia:block.dia, h:slot.hora, div});
         i++;
       }
     });
