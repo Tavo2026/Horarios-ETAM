@@ -240,12 +240,16 @@ function parse(data,div){
     if(!row||!row.c) continue;
     const c0=cv(row.c[0]);
 
-    // Day header
+    // Day header — strict: col0 starts with day name AND row content is mostly day-related
     if(c0 && DIAS_RE.test(c0)){
       // Flush all pendings
       Object.keys(pendingMat).forEach(k=>flush(k));
       const up=norm(c0);
-      for(const d of DIAS){ if(up.startsWith(norm(d))){dia=d;break;} }
+      if(up.startsWith('lunes')) dia='LUNES';
+      else if(up.startsWith('martes')) dia='MARTES';
+      else if(up.startsWith('mier')) dia='MIÉRCOLES';
+      else if(up.startsWith('jueves')) dia='JUEVES';
+      else if(up.startsWith('viernes')) dia='VIERNES';
       continue;
     }
 
