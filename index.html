@@ -639,8 +639,9 @@ function parseTEC(data, div){
           continue;
         }
 
-        // Case D: lone docente — skip
+        // Case D: lone docente — store it (materia will be filled in post-processing)
         if(looksLikeDoc(raw)){
+          pushSlot({d:cleanDoc(raw), m:'', c:curso.name, dia:block.dia, h:slot.hora, div});
           i++;
           continue;
         }
