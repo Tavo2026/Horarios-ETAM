@@ -641,7 +641,10 @@ function parseTEC(data, div){
 
         // Case D: lone docente — store it (materia will be filled in post-processing)
         if(looksLikeDoc(raw)){
-          pushSlot({d:cleanDoc(raw), m:'', c:curso.name, dia:block.dia, h:slot.hora, div});
+          // Check if raw has an embedded time range — use it instead of slot.hora
+          const embeddedTime = raw.match(/(\d+[\.,:]\d+\s*[aA]\s*\d+[\.,:]\d+)/);
+          const horaToUse = embeddedTime ? embeddedTime[1].replace(/,/g,'.').replace(/\s+/g,' ').trim() : slot.hora;
+          pushSlot({d:cleanDoc(raw), m:'', c:curso.name, dia:block.dia, h:horaToUse, div});
           i++;
           continue;
         }
