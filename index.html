@@ -670,13 +670,19 @@ async function loadAll(){
     // Filter out materias that look bogus (contain only known docente surnames).
     const allDocs = new Set();
     allData.forEach(t => { if(t.d) allDocs.add(t.d); });
+    // Also extract individual surnames from compound docente names
+    const docSurnames = new Set();
+    allDocs.forEach(d => d.split(/\s+/).forEach(w => { if(w.length>=4) docSurnames.add(w); }));
 
     function isCleanMateria(m){
       if(!m) return false;
-      // Reject if all words of m are known docentes (likely a parsing accident)
+      // Reject if materia contains a known docente surname (likely a parsing accident)
       const words = m.split(/\s+/);
-      const allAreDocs = words.length>0 && words.every(w => allDocs.has(w) || allDocs.has(w+' '+words[words.indexOf(w)+1]));
-      if(allAreDocs) return false;
+      for(const w of words){
+        if(docSurnames.has(w)) return false;
+      }
+      // Reject obviously bogus materias
+      if(m.length > 60) return false;
       return true;
     }
 
