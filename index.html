@@ -161,7 +161,7 @@ async function fetchGviz(gid){
 
 function cv(c){return(!c||c.v==null)?'':String(c.v).trim();}
 
-function parse(data,div){
+function parseCBT(data,div){
   const rows=data.table.rows, out=[];
 
   // Find header row with course names
@@ -383,6 +383,249 @@ function parse(data,div){
   return out;
 }
 
+// ─────────────────────────────────────────────────────────────────────
+// PARSER TÉCNICA
+// Estructura distinta a CBT:
+// - Cursos en columnas alternadas (curso real en col B, col C vacía, etc.)
+// - Bloques de 2 horas pueden venir en UNA fila ("7.30 a 9.30") o en DOS
+//   filas consecutivas con horarios distintos.
+// - Celdas pueden ser multilínea: "MATERIA G1 / DOC1\nMATERIA G2 / DOC2"
+// - Algunos docentes traen horario embebido: "REYERO 16,30 A 17,30"
+// ─────────────────────────────────────────────────────────────────────
+function parseTEC(data, div){
+  const rows = data.table.rows, out = [];
+
+  const DIAS_RE=/^(LUNES|MARTES|MI[EÉ]R[CK]?\.?|MIERC\.?|JUEVES|VIERNES)/i;
+  const HORA_RE=/^\d+[\.,:]\d+\s*[aA]\s*\d+[\.,:]\d+/;
+  const SKIP_RE=/almuerzo|recreo|^\d+\s*min/i;
+  const CURSO_RE=/[°º]\s*[A-ZÁ]|ELECTROMEC/i;
+
+  const cleanDoc = s => s.toUpperCase()
+    .replace(/\bSUPLE\s+[A-ZÑÁÉÍÓÚ\s\.]+/gi,'')
+    .replace(/\bS\/A\b/gi,'')
+    .replace(/\([A-Z\s]+\)/g,'')
+    .replace(/\d+[\.,:]?\d*\s*[aA]\s*\d+[\.,:]?\d*\s*(HS)?/gi,'') // remove embedded times
+    .replace(/G\d[a-z]?\b/gi,'') // remove group markers G1, G2a, etc
+    .replace(/\s+/g,' ').trim();
+
+  function looksLikeDoc(s){
+    const t = s.trim();
+    if(!t || t.length>40) return false;
+    // Remove embedded time first
+    const cleaned = t.replace(/\d+[\.,:]?\d*\s*[aA]\s*\d+[\.,:]?\d*/gi,'').trim();
+    if(!cleaned) return false;
+    if(/(CIENCIAS|MATEM|INGL[EÉ]S|F[IÍ]SICA|QU[IÍ]MICA|BIOLOG[IÍ]A|HISTORIA|GEOGRAF[IÍ]A|LITERATURA|LENGUAJE|CIUDADAN|ART[IÍ]STICA|ALEM[AÁ]N|FILOSOF[IÍ]A|TECNOL[OÓ]GIC|ECONOM[IÍ]A|DERECHO|SOCIALES|NATURALES|NTICX?|CONTABLE|ORGANIZAC|MICRO|MACRO|PROC\.|PROCED|SIST\.|SISTEMAS|LENG\.|CS\.?\s|SALUD|EIE|SIC|FIS-?Q|MEC[AÁ]NIC|ELECTR|TERMOD|RESIST|EMPREND|MANT\.|MONTAJE|PROYECTO|DISE[ÑN]O|CONOC\.|ENSAYO|MAQ\.|M[AÁ]QUINAS?|TALLER|SEG\.|LAB\.|METROL|AUTOCAD|ARTE|PYME|EDUCACI[OÓ]N|ED\.\s*FIS|DIBUJO|F[IÍ]SICO|GESTION|TRABAJO|AN[AÁ]LISIS|POL[IÍ]TICA|INSTALACIONES|APLICACIONES|ENERG[IÍ]A|PR[AÁ]CTICAS|PROFESIONALIZANTES)/i.test(cleaned)) return false;
+    if(/\.\s/.test(cleaned) && !/^M\.\s*E\./.test(cleaned)) return false;
+    return true;
+  }
+
+  function looksLikeMat(s){
+    return /(CIENCIAS|MATEM|INGL[EÉ]S|F[IÍ]SICA|QU[IÍ]MICA|BIOLOG[IÍ]A|HISTORIA|GEOGRAF[IÍ]A|LITERATURA|LENGUAJE|CIUDADAN|ART[IÍ]STICA|ALEM[AÁ]N|FILOSOF[IÍ]A|TECNOL[OÓ]GIC|ECONOM[IÍ]A|DERECHO|SOCIALES|NATURALES|NTICX?|CONTABLE|ORGANIZAC|MICRO|MACRO|PROC\.|PROCED|SIST\.|SISTEMAS|LENG\.|CS\.?\s|SALUD|EIE|SIC|FIS-?Q|MEC[AÁ]NIC|ELECTR|TERMOD|RESIST|EMPREND|MANT\.|MONTAJE|PROYECTO|DISE[ÑN]O|CONOC\.|ENSAYO|MAQ\.|M[AÁ]QUINAS?|TALLER|SEG\.|LAB\.|METROL|AUTOCAD|ARTE|PYME|EDUCACI[OÓ]N|ED\.\s*FIS|DIBUJO|F[IÍ]SICO|GESTION|TRABAJO|AN[AÁ]LISIS|POL[IÍ]TICA|INSTALACIONES|APLICACIONES|ENERG[IÍ]A|PR[AÁ]CTICAS|PROFESIONALIZANTES)/i.test(s);
+  }
+
+  // 1. Find course header row
+  let hdr = -1, cursos = [];
+  for(let r=0; r<Math.min(8, rows.length); r++){
+    if(!rows[r] || !rows[r].c) continue;
+    const vals = rows[r].c.map(cv);
+    if(vals.some(v => CURSO_RE.test(v) && v.length<50)){
+      hdr = r;
+      rows[r].c.forEach((c,i)=>{
+        const v = cv(c);
+        if(v && CURSO_RE.test(v) && v.length<50){
+          cursos.push({name:v.replace(/\s+/g,' ').trim().replace(/º/g,'°'), col:i});
+        }
+      });
+      break;
+    }
+  }
+  if(!cursos.length) return out;
+
+  // For each curso, determine its column span (until next curso column)
+  cursos.forEach((c, idx) => {
+    c.endCol = (idx+1 < cursos.length) ? cursos[idx+1].col - 1 : 100;
+  });
+
+  // Helper: read cell from row giving preference to the actual curso column,
+  // falling back to adjacent columns within the curso span
+  function readCell(row, curso){
+    if(!row || !row.c) return '';
+    for(let col = curso.col; col <= curso.endCol; col++){
+      const v = row.c[col] ? cv(row.c[col]) : '';
+      if(v) return v;
+    }
+    return '';
+  }
+
+  // 2. Build blocks (groups of consecutive hora rows between day changes / breaks)
+  let dia = '';
+  let blocks = [];
+  let currentBlock = null;
+
+  function endBlock(){
+    if(currentBlock && currentBlock.rows.length) blocks.push(currentBlock);
+    currentBlock = null;
+  }
+
+  for(let r = hdr+1; r < rows.length; r++){
+    const row = rows[r];
+    if(!row || !row.c) continue;
+    const c0 = cv(row.c[0]);
+
+    if(c0 && DIAS_RE.test(c0)){
+      endBlock();
+      const up = norm(c0);
+      if(up.startsWith('lunes')) dia='LUNES';
+      else if(up.startsWith('martes')) dia='MARTES';
+      else if(up.startsWith('mier')) dia='MIÉRCOLES';
+      else if(up.startsWith('jueves')) dia='JUEVES';
+      else if(up.startsWith('viernes')) dia='VIERNES';
+      continue;
+    }
+    if(!dia) continue;
+
+    if(c0 && SKIP_RE.test(c0)){
+      endBlock();
+      continue;
+    }
+
+    if(c0 && HORA_RE.test(c0)){
+      const hora = c0.replace(/[,:]/g,'.').replace(/\s+/g,' ').trim();
+      const cells = {};
+      cursos.forEach(curso => {
+        const v = readCell(row, curso);
+        if(v) cells[curso.col] = v;
+      });
+      if(!currentBlock) currentBlock = {dia, rows:[]};
+      currentBlock.rows.push({hora, cells});
+    } else if(!c0) {
+      // Empty col0 — could be continuation of a 2-hour block where row above had time-range
+      // Check if any cell in this row has content related to known cursos
+      const hasData = cursos.some(c => readCell(row, c));
+      if(hasData && currentBlock && currentBlock.rows.length){
+        // Treat as continuation row of previous hora
+        const prevHora = currentBlock.rows[currentBlock.rows.length-1].hora;
+        const cells = {};
+        cursos.forEach(curso => {
+          const v = readCell(row, curso);
+          if(v) cells[curso.col] = v;
+        });
+        currentBlock.rows.push({hora: prevHora, cells, isContinuation: true});
+      }
+    } else {
+      // Some other text — end block as safety
+      endBlock();
+    }
+  }
+  endBlock();
+
+  // 3. Process each block, each curso column
+  blocks.forEach(block => {
+    cursos.forEach(curso => {
+      const colSlots = block.rows.map(r => ({
+        hora: r.hora,
+        raw: r.cells[curso.col] || '',
+        cont: r.isContinuation
+      }));
+
+      let i = 0;
+      while(i < colSlots.length){
+        const slot = colSlots[i];
+        const raw = slot.raw;
+        if(!raw){ i++; continue; }
+        if(SKIP_RE.test(raw) || DIAS_RE.test(raw)){ i++; continue; }
+
+        // Case A: multi-line cell — multiple parallel classes (G1, G2)
+        if(raw.includes('\n')){
+          const lines = raw.split('\n').map(x => x.trim()).filter(Boolean);
+          // Group lines into pairs: materia + docente
+          let j = 0;
+          while(j < lines.length){
+            const line = lines[j];
+            let mat = '', doc = '';
+            if(line.includes(' / ')){
+              const p = line.split(' / ');
+              mat = p[0]; doc = cleanDoc(p.slice(1).join(' '));
+            } else if(line.includes(' - ')){
+              const p = line.split(' - ');
+              mat = p[0]; doc = cleanDoc(p.slice(1).join(' '));
+            } else if(looksLikeMat(line) && j+1 < lines.length && looksLikeDoc(lines[j+1])){
+              mat = line; doc = cleanDoc(lines[j+1]);
+              j++;
+            } else {
+              mat = line;
+            }
+            mat = mat.toUpperCase().replace(/\s+/g,' ').trim();
+            if(mat){
+              out.push({d:doc, m:mat, c:curso.name, dia:block.dia, h:slot.hora, div});
+              // Also fill next slot if it's continuation
+              const next = colSlots[i+1];
+              if(next && (!next.raw || next.cont)){
+                out.push({d:doc, m:mat, c:curso.name, dia:block.dia, h:next.hora, div});
+              }
+            }
+            j++;
+          }
+          // Advance past continuation slots
+          let k = i+1;
+          while(k < colSlots.length && (!colSlots[k].raw || colSlots[k].cont)){ k++; }
+          i = (k > i+1) ? k : i+1;
+          continue;
+        }
+
+        // Case B: "MATERIA - DOCENTE" in one cell
+        if(raw.includes(' - ')){
+          const parts = raw.split(' - ').map(x => x.trim()).filter(Boolean);
+          let mat = parts[0];
+          let doc = parts.length >= 2 ? cleanDoc(parts.slice(1).join(' - ')) : '';
+          mat = mat.toUpperCase().replace(/\s+/g,' ').trim();
+          if(mat){
+            out.push({d:doc, m:mat, c:curso.name, dia:block.dia, h:slot.hora, div});
+            // Fill next continuation slot
+            const next = colSlots[i+1];
+            if(next && (!next.raw || next.cont)){
+              out.push({d:doc, m:mat, c:curso.name, dia:block.dia, h:next.hora, div});
+              i++;
+            }
+          }
+          i++;
+          continue;
+        }
+
+        // Case C: only materia, look in next slot for docente
+        if(looksLikeMat(raw) && !looksLikeDoc(raw)){
+          const next = colSlots[i+1];
+          if(next && next.raw && looksLikeDoc(next.raw) && !next.raw.includes(' - ') && !next.raw.includes('\n')){
+            const mat = raw.toUpperCase().replace(/\s+/g,' ').trim();
+            const doc = cleanDoc(next.raw);
+            // Fill both slots with the class
+            out.push({d:doc, m:mat, c:curso.name, dia:block.dia, h:slot.hora, div});
+            out.push({d:doc, m:mat, c:curso.name, dia:block.dia, h:next.hora, div});
+            i += 2;
+            continue;
+          }
+          // No docente paired
+          out.push({d:'', m:raw.toUpperCase().replace(/\s+/g,' ').trim(), c:curso.name, dia:block.dia, h:slot.hora, div});
+          i++;
+          continue;
+        }
+
+        // Case D: lone docente — skip
+        if(looksLikeDoc(raw)){
+          i++;
+          continue;
+        }
+
+        // Ambiguous: store as materia
+        out.push({d:'', m:raw.toUpperCase().replace(/\s+/g,' ').trim(), c:curso.name, dia:block.dia, h:slot.hora, div});
+        i++;
+      }
+    });
+  });
+
+  return out;
+}
+
 async function loadAll(){
   const dot=document.getElementById('dot'), st=document.getElementById('stxt');
   dot.className='dot loading'; st.textContent='Actualizando...';
@@ -390,7 +633,7 @@ async function loadAll(){
   document.getElementById('app').style.display='none';
   try{
     const [dCBT,dTEC]=await Promise.all([fetchGviz(GCBT),fetchGviz(GTEC)]);
-    allData=[...parse(dCBT,'CBT'),...parse(dTEC,'TEC')];
+    allData=[...parseCBT(dCBT,'CBT'),...parseTEC(dTEC,'TEC')];
     if(!allData.length) throw new Error('Sin datos');
     dot.className='dot';
     const t=new Date().toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'});
